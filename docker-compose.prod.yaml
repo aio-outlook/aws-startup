@@ -1,0 +1,40 @@
+services:
+  prod1:
+    image: ${PROD_ECR_IMAGE}
+    container_name: prod1
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    expose:
+      - "3000"
+    networks:
+      - app_network
+
+  prod2:
+    image: ${PROD_ECR_IMAGE}
+    container_name: prod2
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    expose:
+      - "3000"
+    networks:
+      - app_network
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    restart: always
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+    depends_on:
+      - prod1
+      - prod2
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
