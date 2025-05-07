@@ -1,0 +1,85 @@
+name: Recharge-master Service
+
+on:
+  push:
+    branches: [ develop.nill ]
+  workflow_dispatch:
+
+env:
+  RUN_REGION: europe-west3
+  SERVICE_NAME: recharge-master
+  VERSION: v1.0.0
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Download env and config files from S3
+        run: |
+          aws s3 cp s3://develop-conf/recharge-master/recharge-master-dev ./.env
+          aws s3 cp s3://develop-conf/recharge-master/config ./src/config/config.json 
+          aws s3 cp s3://develop-conf/recharge-master/sequelize ./sequelizerc 
+          aws s3 cp s3://prod-conf/pem/globbtech.pem ec2_key.pem 
+          
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v1
+        with:
+          node-version: "20"
+
+      - name: Set short git commit SHA
+        id: commit
+        uses: prompt/actions-commit-hash@v2
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Create Dockerfile
+        run: |
+          echo -e 'FROM node:20\nLABEL maintainer="Hayio Technologies LTD <hayio0.tech@gmail.com>"\nWORKDIR /app\nCOPY . /app\nCMD ["npm", "start"]\nEXPOSE 3000' > Dockerfile
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+# ...
+      - name: Build and Push Docker Image to ECR
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: ${{ secrets.AWS_ECR_DEV_REPOSITORY }}
+          IMAGE_TAG: ${{ steps.commit.outputs.short }}
+        run: |
+          TIMESTAMP=$(date +'%Y%m%d%H%M%S')
+          IMAGE=$REGISTRY/$REPOSITORY:${{ env.VERSION }}-$TIMESTAMP-${IMAGE_TAG}
+          echo "DEV_ECR_IMAGE=$IMAGE" >> $GITHUB_ENV
+
+          docker build -t $IMAGE .
+          docker push $IMAGE
+
+          
+      - name: SSH to EC2 and Deploy
+        env:
+          DEV_ECR_IMAGE: ${{ env.DEV_ECR_IMAGE }}
+        run: |
+          chmod 400 ec2_key.pem
+
+          ssh -o StrictHostKeyChecking=no -i ec2_key.pem ${{ secrets.SSH_USER }}@${{ secrets.EC2_HOST }} << EOF
+            set -e
+            cd /home/${{ secrets.SSH_USER }}/_app/
+            export DEV_ECR_IMAGE=$DEV_ECR_IMAGE
+
+            aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 313472484012.dkr.ecr.us-west-2.amazonaws.com
+
+            docker-compose pull 
+            docker-compose up -d --remove-orphans
+          EOF
