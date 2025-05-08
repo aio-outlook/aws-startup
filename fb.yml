@@ -1,6 +1,17 @@
+version: '3.8'
+
 services:
+  dev:
+    image: ${DEV_ECR_IMAGE:-your_fallback_dev_image}
+    container_name: dev
+    restart: unless-stopped
+    expose:
+      - "3000"
+    networks:
+      - app_network
+
   prod1:
-    image: ${PROD_ECR_IMAGE}
+    image: ${PROD_ECR_IMAGE:-your_fallback_prod_image}
     container_name: prod1
     restart: unless-stopped
     expose:
@@ -9,7 +20,7 @@ services:
       - app_network
 
   prod2:
-    image: ${PROD_ECR_IMAGE}
+    image: ${PROD_ECR_IMAGE:-your_fallback_prod_image}
     container_name: prod2
     restart: unless-stopped
     expose:
@@ -26,11 +37,10 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - prod1
-      - prod2
+      - dev
     networks:
       - app_network
 
 networks:
   app_network:
-    driver: bridge
+    external: true
