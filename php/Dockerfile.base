@@ -1,0 +1,20 @@
+FROM php:7.4-fpm
+
+RUN apt-get update && apt-get install -y \
+    git curl zip unzip libonig-dev libxml2-dev libzip-dev libpng-dev \
+    libjpeg-dev libfreetype6-dev libpq-dev libssl-dev \
+    libxslt-dev libcurl4-openssl-dev libicu-dev libgd-dev \
+    zlib1g-dev libwebp-dev libxpm-dev libvpx-dev \
+    nodejs npm \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
+    && docker-php-ext-install pdo_mysql mbstring zip exif pcntl gd intl xsl
+
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+# Set up working directory (can be overridden)
+WORKDIR /var/www
+
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Optional: Set timezone or locale if needed
+# ENV TZ=Africa/Lagos
