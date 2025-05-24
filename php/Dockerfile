@@ -1,4 +1,4 @@
-FROM laravel-base:php74
+FROM laravel-base:php81
 
 WORKDIR /var/www
 
